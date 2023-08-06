@@ -1,15 +1,12 @@
 from typing import List, Dict
 import aiohttp
-import os
 
 
 class NYTimes:
-
-    
     def __init__(
-        self, api_token: str, api_secret: str,
+        self, api_key: str, api_secret: str,
     ) -> None:
-      self._api_token = api_token
+      self._api_key = api_key
       self._api_secret = api_secret
 
     async def get_articles_from_specified_month(
@@ -31,14 +28,10 @@ class NYTimes:
         List[Dict]
             Requested data in specified month-year timeframe
         """
-        url: str = f"https://api.nytimes.com/svc/archive/v1/{year}/{month}.json"
-
-        headers: Dict[str, str] = {
-            "Authorization": f"Bearer {self._api_token}",
-        }
+        url: str = f"https://api.nytimes.com/svc/archive/v1/{year}/{month}.json?api-key={self._api_key}"
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers) as response:
+            async with session.get(url) as response:
                 if response.status != 200:
                     raise Exception(f"GET {url} {response.status}")
                 return await response.json()
