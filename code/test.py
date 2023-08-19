@@ -1,10 +1,11 @@
 from nytimes.client_nytimes import NYTimes
 import os
+import asyncio
 
-key = os.environ["NYTIMES_TECH_API_KEY"]
-secret = os.environ["NYTIMES_TECH_API_SECRET"]
-
-ny = NYTimes(key, secret)
+ny = NYTimes()
 
 async def main():
-    ny.get_articles_from_specified_month(7, 2023)
+    ny.gather_all_machine_learning_articles()
+
+if __name__ == "__main__":
+    asyncio.run(main())
