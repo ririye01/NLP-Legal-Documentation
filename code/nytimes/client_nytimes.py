@@ -1,8 +1,9 @@
 import os
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Union, Any
 
 import asyncio
 import aiohttp
+import asyncpg
 import polars as pl
 import numpy as np
 
@@ -13,6 +14,7 @@ class NYTimes:
         api_key: str = os.environ["NYTIMES_TECH_API_KEY"],
     ) -> None:
       self._api_key = api_key
+
 
     async def get_articles_from_specified_month(
         self, month: int, year: int,
@@ -124,6 +126,7 @@ class NYTimes:
     async def impute_article_info_into_dataframe(
         self,
         articles: List[Dict[str, Any]],
+        existing_df: Optional[pl.DataFrame] = None
     ) -> pl.DataFrame:
         """
         Convert NYTimes articles data into a Polars DataFrame.
@@ -131,78 +134,127 @@ class NYTimes:
         Parameters
         ----------
         articles: List[Dict[str, Any]]
-            A list of dictionaries, each representing an article from the NY Times API.
+            A list of dictionaries, each representing an article 
+            from the NY Times API.
+
+        existing_df: pl.DataFrame, optional
+            An existing Polars DataFrame to append data to. If 
+            not provided, a new DataFrame will be created.
 
         Returns
         -------
         pl.DataFrame
-            A Polars DataFrame representation of the articles data.
+            A Polars DataFrame representation of the articles data, 
+            either newly created or appended to the existing one.
         """
         
-        # Extracting column data
-        main_headlines: List[Optional[str]] = [
-            art["headline"]["main"] for art in articles
-        ]
-        abstracts: List[Optional[str]] = [
-            art["abstract"] for art in articles
-        ]
-        web_urls: List[Optional[str]] = [
-            art["web_url"] for art in articles
-        ]
-        snippets: List[Optional[str]] = [
-            art["snippet"] for art in articles
-        ]
-        lead_paragraphs: List[Optional[str]] = [
-            art["lead_paragraph"] for art in articles
-        ]
-        pub_dates: List[Optional[str]] = [ 
-            art["pub_date"] for art in articles
-        ]
-        document_types: List[Optional[str]] = [ 
-            art["document_type"] for art in articles
-        ]
-        news_desks: List[Optional[str]] = [
-            art["news_desk"] for art in articles
-        ]
-        section_names: List[Optional[str]] = [ 
-            art["section_name"] for art in articles
-        ]
-        subsection_names: List[Optional[str]] = [
-            art.get("subsection_name", None) for art in articles
-        ]
-        author_lists: List[Optional[List[str]]] = [
-            " ".join([
-                person['firstname'] + ' ' + person['lastname'] 
-                for person in art["byline"]["person"]
-            ]) or np.nan 
-            for art in articles
-        ]
-        organization_lists: List[Optional[List[str]]] = [
-            " ".join(art["byline"]["organization"]) or np.nan 
-            if art["byline"]["organization"] else np.nan 
-            for art in articles
-        ]
-        type_of_materials: List[Optional[str]] = [
-            art["type_of_material"] for art in articles
-        ]
-        word_counts: List[Optional[str]] = [
-            art["word_count"] for art in articles
-        ]
+        # Extract data from articles
+        data: Dict[str, List[Union[str, int, Optional[Any]]]] = {
+            "main_headline": [],
+            "abstract": [],
+            "web_url": [],
+            "snippet": [],
+            "lead_paragraph": [],
+            "pub_date": [],
+            "document_type": [],
+            "news_desk": [],
+            "section_name": [],
+            "subsection_name": [],
+            "author_list": [],
+            "organization_list": [],
+            "type_of_material": [],
+            "word_count": [],
+        }
+        
+        for art in articles:
+            data["main_headline"].append(art["headline"]["main"])
+            data["abstract"].append(art["abstract"])
+            data["web_url"].append(art["web_url"])
+            data["snippet"].append(art["snippet"])
+            data["lead_paragraph"].append(art["lead_paragraph"])
+            data["pub_date"].append(art["pub_date"])
+            data["document_type"].append(art["document_type"])
+            data["news_desk"].append(art["news_desk"])
+            data["section_name"].append(art["section_name"])
+            data["subsection_name"].append(art.get("subsection_name", None))
+            data["author_list"].append(
+                " ".join([
+                    person["firstname"] + ' ' + person["lastname"] 
+                    for person in art["byline"]["person"]
+                ]) or None
+            )
+            data["organization_list"].append(
+                " ".join(art["byline"]["organization"]) or None 
+                if art["byline"]["organization"] else None
+            )
+            data["type_of_material"].append(art["type_of_material"])
+            data["word_count"].append(art["word_count"])
+        
+        # Create or append to DataFrame
+        new_df: pl.DataFrame = pl.DataFrame(data)
+        
+        if existing_df is not None:
+            return existing_df.vstack(new_df)
+        else:
+            return new_df
 
-        # Creating a DataFrame with indicated fields
-        return pl.DataFrame({
-            "main_headline": main_headlines,
-            "abstract": abstracts,
-            "web_url": web_urls,
-            "snippet": snippets,
-            "lead_paragraph": lead_paragraphs,
-            "pub_date": pub_dates,
-            "document_type": document_types,
-            "news_desk": news_desks,
-            "section_name": section_names,
-            "subsection_name": subsection_names,
-            "author_list": author_lists,
-            "organization_list": organization_lists,
-            "type_of_material": type_of_materials,
-            "word_count": word_counts,
-        })
+
+    async def impute_article_info_into_database(
+        self,
+        articles: List[Dict[str, Any]],
+        db_config: Dict[str, str]
+    ) -> None:
+        """
+        Store NYTimes articles data into a PostgreSQL Database.
+
+        Parameters
+        ----------
+        articles: List[Dict[str, Any]]
+            A list of dictionaries, each representing an article from 
+            the NY Times API.
+        
+        db_config: Dict[str, str]
+            Database configuration parameters, including "user", 
+            "password", "database", "host", and "port".
+        
+        """
+        
+        # Create the connection
+        conn = await asyncpg.connect(**db_config)
+        
+        # SQL command to insert data
+        insert_sql = """
+            INSERT INTO nytimes_articles (
+                main_headline, abstract, web_url, snippet, 
+                lead_paragraph, pub_date, document_type, news_desk,
+                section_name, subsection_name, author_list, 
+                organization_list, type_of_material, word_count
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
+        """
+        
+        # Insert each article into the database
+        for art in articles:
+            await conn.execute(
+                insert_sql,
+                art["headline"]["main"],
+                art["abstract"],
+                art["web_url"],
+                art["snippet"],
+                art["lead_paragraph"],
+                art["pub_date"],
+                art["document_type"],
+                art["news_desk"],
+                art["section_name"],
+                art.get("subsection_name", None),
+                " ".join([
+                    person['firstname'] + ' ' + person['lastname']
+                    for person in art["byline"]["person"]
+                ]) or None,
+                " ".join(art["byline"]["organization"]) or None
+                if art["byline"]["organization"] else None,
+                art["type_of_material"],
+                art["word_count"]
+            )
+        
+        # Close the connection
+        await conn.close() 
