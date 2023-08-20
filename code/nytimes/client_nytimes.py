@@ -1,12 +1,16 @@
-import asyncio
-from typing import List, Dict, Optional, Any
-import aiohttp
 import os
+from typing import List, Dict, Optional, Any
+
+import asyncio
+import aiohttp
+import polars as pl
+import numpy as np
 
 
 class NYTimes:
-    def __init__(self, 
-        api_key: str = os.environ["NYTIMES_TECH_API_KEY"]
+    def __init__(
+        self, 
+        api_key: str = os.environ["NYTIMES_TECH_API_KEY"],
     ) -> None:
       self._api_key = api_key
 
@@ -39,7 +43,7 @@ class NYTimes:
                 return await response.json()
 
 
-    async def fetch_machine_learning_articles(
+    async def _fetch_machine_learning_articles(
         self, page: int = 0
     ) -> Dict[str, Any]:
         """
@@ -77,8 +81,10 @@ class NYTimes:
         }
 
         async with aiohttp.ClientSession() as session:
-            response = session.get(BASE_URL, params=query)
-            return await response.json()
+            async with session.get(BASE_URL, params=query) as response:
+                if response.status != 200:
+                    raise Exception(f"GET {BASE_URL} {response.status}") 
+                return await response.json()
 
 
     async def gather_all_machine_learning_articles(self) -> List[Dict[str, Any]]:
@@ -92,7 +98,7 @@ class NYTimes:
         """
         # Start by fetching the first page to get the total hits
         first_page: Dict[str, Any] = (
-            await self.fetch_machine_learning_articles()
+            await self._fetch_machine_learning_articles()
         )
         total_hits: int = first_page["response"]["meta"]["hits"]
         total_pages: int = min(
@@ -102,7 +108,7 @@ class NYTimes:
 
         # Create tasks to fetch all pages concurrently
         tasks: List[Any] = [
-            self.fetch_machine_learning_articles(page) 
+            self._fetch_machine_learning_articles(page) 
             for page in range(1, total_pages)
         ]
         pages: List[Dict[str, Any]] = await asyncio.gather(*tasks)
@@ -113,3 +119,86 @@ class NYTimes:
             all_articles.extend(page["response"]["docs"])
 
         return all_articles
+
+
+    async def impute_article_info_into_dataframe(
+        self,
+        articles: List[Dict[str, Any]],
+    ) -> pl.DataFrame:
+        """
+        Convert NYTimes articles data into a Polars DataFrame.
+
+        Parameters
+        ----------
+        articles: List[Dict[str, Any]]
+            A list of dictionaries, each representing an article from the NY Times API.
+
+        Returns
+        -------
+        pl.DataFrame
+            A Polars DataFrame representation of the articles data.
+        """
+        
+        # Extracting column data
+        main_headline: List[Optional[str]] = [
+            art["headline"]["main"] for art in articles
+        ]
+        abstract: List[Optional[str]] = [
+            art["abstract"] for art in articles
+        ]
+        web_url: List[Optional[str]] = [art["web_url"] for art in articles]
+        snippet: List[Optional[str]] = [art["snippet"] for art in articles]
+        lead_paragraph: List[Optional[str]] = [
+            art["lead_paragraph"] for art in articles
+        ]
+        pub_date: List[Optional[str]] = [ 
+            art["pub_date"] for art in articles
+        ]
+        document_type: List[Optional[str]] = [ 
+            art["document_type"] for art in articles
+        ]
+        news_desk: List[Optional[str]] = [
+            art["news_desk"] for art in articles
+        ]
+        section_name: List[Optional[str]] = [ 
+            art["section_name"] for art in articles
+        ]
+        subsection_name: List[Optional[str]] = [
+            art.get("subsection_name", None) for art in articles
+        ]
+        author_list: List[Optional[List[str]]] = [
+            " ".join([
+                person['firstname'] + ' ' + person['lastname'] 
+                for person in art["byline"]["person"]
+            ]) or np.nan 
+            for art in articles
+        ]
+        organization_list: List[Optional[List[str]]] = [
+            " ".join(art["byline"]["organization"]) or np.nan 
+            if art["byline"]["organization"] else np.nan 
+            for art in articles
+        ]
+        type_of_material: List[Optional[str]] = [
+            art["type_of_material"] for art in articles
+        ]
+        word_count: List[Optional[str]] = [
+            art["word_count"] for art in articles
+        ]
+
+        # Creating a DataFrame
+        return pl.DataFrame({
+            "main_headline": main_headline,
+            "abstract": abstract,
+            "web_url": web_url,
+            "snippet": snippet,
+            "lead_paragraph": lead_paragraph,
+            "pub_date": pub_date,
+            "document_type": document_type,
+            "news_desk": news_desk,
+            "section_name": section_name,
+            "subsection_name": subsection_name,
+            "author_list": author_list,
+            "organization_list": organization_list,
+            "type_of_material": type_of_material,
+            "word_count": word_count
+        })
