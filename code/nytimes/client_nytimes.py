@@ -140,65 +140,69 @@ class NYTimes:
         """
         
         # Extracting column data
-        main_headline: List[Optional[str]] = [
+        main_headlines: List[Optional[str]] = [
             art["headline"]["main"] for art in articles
         ]
-        abstract: List[Optional[str]] = [
+        abstracts: List[Optional[str]] = [
             art["abstract"] for art in articles
         ]
-        web_url: List[Optional[str]] = [art["web_url"] for art in articles]
-        snippet: List[Optional[str]] = [art["snippet"] for art in articles]
-        lead_paragraph: List[Optional[str]] = [
+        web_urls: List[Optional[str]] = [
+            art["web_url"] for art in articles
+        ]
+        snippets: List[Optional[str]] = [
+            art["snippet"] for art in articles
+        ]
+        lead_paragraphs: List[Optional[str]] = [
             art["lead_paragraph"] for art in articles
         ]
-        pub_date: List[Optional[str]] = [ 
+        pub_dates: List[Optional[str]] = [ 
             art["pub_date"] for art in articles
         ]
-        document_type: List[Optional[str]] = [ 
+        document_types: List[Optional[str]] = [ 
             art["document_type"] for art in articles
         ]
-        news_desk: List[Optional[str]] = [
+        news_desks: List[Optional[str]] = [
             art["news_desk"] for art in articles
         ]
-        section_name: List[Optional[str]] = [ 
+        section_names: List[Optional[str]] = [ 
             art["section_name"] for art in articles
         ]
-        subsection_name: List[Optional[str]] = [
+        subsection_names: List[Optional[str]] = [
             art.get("subsection_name", None) for art in articles
         ]
-        author_list: List[Optional[List[str]]] = [
+        author_lists: List[Optional[List[str]]] = [
             " ".join([
                 person['firstname'] + ' ' + person['lastname'] 
                 for person in art["byline"]["person"]
             ]) or np.nan 
             for art in articles
         ]
-        organization_list: List[Optional[List[str]]] = [
+        organization_lists: List[Optional[List[str]]] = [
             " ".join(art["byline"]["organization"]) or np.nan 
             if art["byline"]["organization"] else np.nan 
             for art in articles
         ]
-        type_of_material: List[Optional[str]] = [
+        type_of_materials: List[Optional[str]] = [
             art["type_of_material"] for art in articles
         ]
-        word_count: List[Optional[str]] = [
+        word_counts: List[Optional[str]] = [
             art["word_count"] for art in articles
         ]
 
-        # Creating a DataFrame
+        # Creating a DataFrame with indicated fields
         return pl.DataFrame({
-            "main_headline": main_headline,
-            "abstract": abstract,
-            "web_url": web_url,
-            "snippet": snippet,
-            "lead_paragraph": lead_paragraph,
-            "pub_date": pub_date,
-            "document_type": document_type,
-            "news_desk": news_desk,
-            "section_name": section_name,
-            "subsection_name": subsection_name,
-            "author_list": author_list,
-            "organization_list": organization_list,
-            "type_of_material": type_of_material,
-            "word_count": word_count
+            "main_headline": main_headlines,
+            "abstract": abstracts,
+            "web_url": web_urls,
+            "snippet": snippets,
+            "lead_paragraph": lead_paragraphs,
+            "pub_date": pub_dates,
+            "document_type": document_types,
+            "news_desk": news_desks,
+            "section_name": section_names,
+            "subsection_name": subsection_names,
+            "author_list": author_lists,
+            "organization_list": organization_lists,
+            "type_of_material": type_of_materials,
+            "word_count": word_counts,
         })
