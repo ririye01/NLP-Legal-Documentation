@@ -234,6 +234,13 @@ class NYTimes:
         
         # Insert each article into the database
         for art in articles:
+            authors_array = [
+                person['firstname'] + ' ' + person['lastname']
+                for person in art["byline"]["person"]
+            ] or None
+
+            organizations_array = art["byline"]["organization"] or None
+
             await conn.execute(
                 insert_sql,
                 art["headline"]["main"],
@@ -246,15 +253,11 @@ class NYTimes:
                 art["news_desk"],
                 art["section_name"],
                 art.get("subsection_name", None),
-                " ".join([
-                    person['firstname'] + ' ' + person['lastname']
-                    for person in art["byline"]["person"]
-                ]) or None,
-                " ".join(art["byline"]["organization"]) or None
-                if art["byline"]["organization"] else None,
+                authors_array,
+                organizations_array,
                 art["type_of_material"],
                 art["word_count"]
             )
         
         # Close the connection
-        await conn.close() 
+        await conn.close()  
